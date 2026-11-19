@@ -252,4 +252,167 @@
     window.addEventListener("resize", spy);
     spy();
   }
+
+  /* ---------- 마우스 효과(11-19 밤, BUILD_NOTES 15장) ----------
+     ① 바탕 빛: 커서를 따라 네이비 바탕 위에 옅은 금색·아이스 블루 빛이 따라옵니다. 글·카드 뒤에 깔리고(z-index -1) 누르기를 막지 않습니다.
+     ② 카드 테두리: 커서 가까운 카드의 테두리가 옅은 금색으로 밝아집니다(outline 만, 크기·배치는 그대로).
+     ③ 바닥 픽셀 SANCTUS: 커서가 지나간 칸이 금색으로 밝아졌다가 천천히 어두운 색으로 돌아갑니다(짧은 물결). 글자 모양은 그대로입니다.
+     ①② 는 마우스가 있는 기기에서만, ③ 은 터치 기기에서 누른 자리 둘레만 한 번. 움직임 줄이기 설정이면 셋 다 하지 않습니다.
+     requestAnimationFrame 고리 하나가 셋을 함께 그리고, 움직임이 가라앉거나 탭이 안 보이면 멈춥니다. 패럴랙스는 쓰지 않습니다. */
+  if (!reduce && window.requestAnimationFrame) (function () {
+    var CARD_SEL = ".svc,.gc,.cd,.bt,.sp,.elc,.gg-card,.cmp-card,.pt-grid>li,.gl-names>li,.pr>li,.steps li,.fw-nodes>li,.fw-hub," +
+      ".frame,.code,.calc,.rcpt,.case-fig,.cta-box,.tl-box,.mgr,.mg-fig,.ch-board,.er-box,.cto,.ct-fig,.doc-sec.alt,.ft .who";
+    var CARD_R = 160;          /* 카드 바깥 이 거리(px)부터 테두리가 밝아지기 시작 */
+    var FOLLOW = 0.2;          /* 빛이 커서를 따라가는 정도(장면당, 60fps 기준). 튀지 않게 넘치지 않는 감쇠만 씁니다 */
+    var PIX_CORE = 2.2, PIX_RIP_V = 0.016, PIX_RIP_MAX = 4, PIX_FADE = 900;   /* 칸 단위 · 칸/ms · 칸 · ms(밝기가 1/e 로 줄어드는 시간, 약 2초에 원래 색) */
+    var pix = $(".ft-pix");
+    var glow = null, cards = [], vis = [], cells = [];
+    var mx = 0, my = 0, gx = 0, gy = 0, inside = false, moved = false, rafId = 0, lastT = 0;
+    var ripples = [], lastRip = { x: -99, y: -99, t: 0 }, pixNear = false, tap = null;
+
+    if (finePointer) {
+      glow = doc.createElement("div");
+      glow.className = "fx-glow";
+      glow.setAttribute("aria-hidden", "true");
+      doc.body.insertBefore(glow, doc.body.firstChild);
+      cards = $$(CARD_SEL);
+      cards.forEach(function (c) { c.classList.add("fx-card"); c._fxg = 0; c._fxw = 0; });
+      if ("IntersectionObserver" in window) {
+        var cio = new IntersectionObserver(function (es) {
+          es.forEach(function (e) {
+            var i = vis.indexOf(e.target);
+            if (e.isIntersecting && i < 0) vis.push(e.target);
+            else if (!e.isIntersecting && i >= 0) { vis.splice(i, 1); e.target._fxg = 0; e.target._fxw = 0; e.target.style.removeProperty("--fx-g"); }
+          });
+        }, { rootMargin: CARD_R + "px" });
+        cards.forEach(function (c) { cio.observe(c); });
+      } else { vis = cards.slice(); }
+    }
+    if (pix) {
+      $$("rect", pix).forEach(function (r) {
+        cells.push({ el: r, x: parseFloat(r.getAttribute("x")) + 0.43, y: parseFloat(r.getAttribute("y")) + 0.43, h: 0, s: 0 });
+      });
+      if ("IntersectionObserver" in window) {
+        new IntersectionObserver(function (es) { pixNear = es[0].isIntersecting; }, { rootMargin: "120px" }).observe(pix);
+      } else { pixNear = true; }
+    }
+    if (!glow && !cells.length) return;
+
+    var kick = function () { if (!rafId && !doc.hidden) { lastT = 0; rafId = requestAnimationFrame(tick); } };
+    var ease = function (base, dt) { return 1 - Math.pow(1 - base, dt / 16.7); };
+
+    /* 화면 좌표 → 픽셀 글자 좌표(칸 단위). getScreenCTM 은 스크롤·크기 변화를 그대로 반영합니다. */
+    var toPix = function (x, y) {
+      var m = pix.getScreenCTM(); if (!m) return null;
+      var v = m.inverse();
+      return { x: v.a * x + v.c * y + v.e, y: v.b * x + v.d * y + v.f };
+    };
+    var vbW = pix ? (pix.viewBox && pix.viewBox.baseVal ? pix.viewBox.baseVal.width : 41) : 0;
+    var heat = function (p, now) {
+      if (!p || p.x < -PIX_CORE || p.x > vbW + PIX_CORE || p.y < -PIX_CORE || p.y > 9 + PIX_CORE) return false;
+      cells.forEach(function (c) {
+        var dx = c.x - p.x, dy = c.y - p.y, d2 = dx * dx + dy * dy;
+        if (d2 < PIX_CORE * PIX_CORE) c.h = Math.max(c.h, 0.95 * (1 - d2 / (PIX_CORE * PIX_CORE)));
+      });
+      var md = Math.abs(p.x - lastRip.x) + Math.abs(p.y - lastRip.y);
+      if (md > 1.2 || now - lastRip.t > 160) {
+        ripples.push({ x: p.x, y: p.y, t: now });
+        if (ripples.length > 8) ripples.shift();
+        lastRip = { x: p.x, y: p.y, t: now };
+      }
+      return true;
+    };
+
+    function tick(now) {
+      rafId = 0;
+      var dt = lastT ? Math.min(50, now - lastT) : 16.7, active = false, i, c;
+      lastT = now;
+      /* --- 읽기(배치 계산)를 먼저 모두 하고, 쓰기는 뒤에 한꺼번에 --- */
+      if (glow && inside) {
+        var k = ease(FOLLOW, dt);
+        gx += (mx - gx) * k; gy += (my - gy) * k;
+        if (Math.abs(mx - gx) + Math.abs(my - gy) > 0.4) active = true;
+      }
+      var targets = [];
+      for (i = 0; i < vis.length; i++) {
+        c = vis[i];
+        var tg = 0;
+        if (inside) {
+          var r = c.getBoundingClientRect();
+          var ox = Math.max(r.left - gx, 0, gx - r.right), oy = Math.max(r.top - gy, 0, gy - r.bottom), d;
+          if (ox || oy) d = Math.sqrt(ox * ox + oy * oy);
+          else d = Math.min(gx - r.left, r.right - gx, gy - r.top, r.bottom - gy) * 0.5;  /* 안쪽: 테두리에 가까울수록 밝게 */
+          if (d < CARD_R) { tg = 1 - d / CARD_R; tg *= tg; }
+        }
+        targets.push(tg);
+      }
+      var p = null;
+      if (cells.length && pixNear && finePointer && inside && moved) p = toPix(mx, my);   /* 픽셀 글자는 커서 자리 그대로(따라오는 빛보다 빠르게) */
+      if (cells.length && tap) { var tp = toPix(tap.x, tap.y); if (tp) heat(tp, now); tap = null; }
+      if (p) heat(p, now);
+      moved = false;
+      /* --- 쓰기 --- */
+      if (glow && inside) glow.style.transform = "translate3d(" + gx.toFixed(1) + "px," + gy.toFixed(1) + "px,0)";
+      var kc = ease(0.22, dt);
+      for (i = 0; i < vis.length; i++) {
+        c = vis[i];
+        c._fxg += (targets[i] - c._fxg) * kc;
+        if (Math.abs(targets[i] - c._fxg) > 0.004) active = true; else c._fxg = targets[i];
+        if (Math.abs(c._fxg - c._fxw) > 0.004 || (c._fxg === 0 && c._fxw !== 0)) {
+          c._fxw = c._fxg;
+          if (c._fxg) c.style.setProperty("--fx-g", c._fxg.toFixed(3)); else c.style.removeProperty("--fx-g");
+        }
+      }
+      if (cells.length) {
+        for (i = ripples.length - 1; i >= 0; i--) {
+          var rp = ripples[i], rad = (now - rp.t) * PIX_RIP_V;
+          if (rad > PIX_RIP_MAX) { ripples.splice(i, 1); continue; }
+          var amp = 0.55 * (1 - rad / PIX_RIP_MAX);
+          cells.forEach(function (cl) {
+            var dd = Math.sqrt((cl.x - rp.x) * (cl.x - rp.x) + (cl.y - rp.y) * (cl.y - rp.y)), band = 1 - Math.abs(dd - rad) / 0.9;
+            if (band > 0) cl.h = Math.max(cl.h, band * amp);
+          });
+          active = true;
+        }
+        var fade = Math.exp(-dt / PIX_FADE);
+        cells.forEach(function (cl) {
+          if (cl.h < 0.004) cl.h = 0; else { cl.h *= fade; active = true; }
+          if (Math.abs(cl.h - cl.s) > 0.008 || (!cl.h && cl.s)) {
+            cl.s = cl.h;
+            if (!cl.h) { cl.el.style.fill = ""; return; }
+            /* 색은 빨리 금색(--amber)으로, 밝기는 천천히 — 반쯤 식은 칸도 회갈색이 아니라 옅은 금색으로 보이게 */
+            var hc = Math.min(1, cl.h * 2.5), ha = Math.pow(cl.h, 0.75);
+            cl.el.style.fill = "rgba(" + Math.round(238 - 11 * hc) + "," + Math.round(241 - 60 * hc) + "," +
+              Math.round(246 - 144 * hc) + "," + (0.08 + 0.87 * ha).toFixed(3) + ")";
+          }
+        });
+      }
+      if (active) rafId = requestAnimationFrame(tick);
+    }
+
+    if (finePointer) {
+      doc.addEventListener("pointermove", function (e) {
+        if (e.pointerType && e.pointerType !== "mouse") return;
+        mx = e.clientX; my = e.clientY;
+        if (!inside) { inside = true; gx = mx; gy = my; if (glow) { glow.style.transform = "translate3d(" + gx + "px," + gy + "px,0)"; glow.classList.add("on"); } }
+        moved = true;
+        kick();
+      }, { passive: true });
+      var leave = function () { inside = false; if (glow) glow.classList.remove("on"); kick(); };
+      doc.addEventListener("mouseout", function (e) { if (!e.relatedTarget) leave(); });   /* 커서가 창 밖으로 */
+      window.addEventListener("blur", leave);
+      window.addEventListener("scroll", function () { if (inside) { moved = pixNear; kick(); } }, { passive: true });
+    }
+    /* 터치·펜: 누른 자리 둘레만 한 번 밝아짐 */
+    if (cells.length) {
+      doc.addEventListener("pointerdown", function (e) {
+        if (e.pointerType === "mouse" || !pixNear) return;
+        tap = { x: e.clientX, y: e.clientY };
+        kick();
+      }, { passive: true });
+    }
+    doc.addEventListener("visibilitychange", function () {
+      if (doc.hidden) { if (rafId) cancelAnimationFrame(rafId); rafId = 0; inside = false; if (glow) glow.classList.remove("on"); }
+    });
+  })();
 })();

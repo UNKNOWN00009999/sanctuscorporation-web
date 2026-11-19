@@ -1068,7 +1068,7 @@ body.menu-open{overflow:hidden}
 
 /* ========== 제휴사 로고(11-19) — 이름 글자 대신 공식 로고(BUILD_NOTES 13·14장) ==========
    11-19 «2번»: 칩(밝은 바탕) 없이 네이비 위에 흰색 단색으로 바로 둡니다. 공식 흰색판은 파일 그대로, 흰색판이 없는 로고는
-   .wm(흰색 실루엣 필터). 평소 불투명도 .7, 칸에 마우스를 올리거나 초점이 들어오면 1. 금색은 장식에만(칸 테두리·connected 점).
+   .wm(흰색 실루엣 필터). 평소 불투명도 .7, 칸에 마우스를 올리거나 초점이 들어오면 1. 금색은 칸 테두리(마우스 올림)에만. connected 점은 원래 아이스 블루(앞쪽 .gl-names span::before·.pt-st::before 그대로, 11-19 밤 되돌림).
    크기는 «면적 맞춤»: 폭 = 칸 공통 폭(--lg-s) × 로고별 k(√(가로세로 비 ÷ 5.5), lib/logos.py 가 style 에 줌),
    높이는 비율대로 따라와 늘어나거나 찌그러지지 않습니다. 로고 자리(.lg)의 높이·옆 여백은 칩이 있던 때 그대로라 칸 배치가 같습니다.
    --lg-s 의 px 상한은 «가장 덜 납작한 로고(KOVAN, 비 3.33 ÷ k 0.778 = 4.28)의 높이 ≤ 자리 높이의 0.4» 가 되게 정했습니다. */
@@ -1080,10 +1080,20 @@ body.menu-open{overflow:hidden}
 .pt-grid li:not(.etc):hover,.pt-grid li:not(.etc):focus-within,.fw-nodes li.lg-node:hover{border-color:var(--amber)}
 .gl-names li:hover .lg img,.gl-names li:focus-within .lg img,.pr li:hover .lg img,.pr li:focus-within .lg img,
 .pt-grid li:hover .lg img,.pt-grid li:focus-within .lg img,.fw-nodes li.lg-node:hover img{opacity:1}
-.gl-names li:not(.etc) span::before,.pr li:not(.etc) span::before{background:var(--amber);box-shadow:0 0 0 3px var(--amber-soft)}
-.pt-grid li:not(.etc) .pt-st::before{background:var(--amber);box-shadow:0 0 0 4px var(--amber-soft)}
 .gl-names .lg,.pr .lg{--lg-h:44px;--lg-px:0px;--lg-s:min(100cqw,84px)}      /* 84 ≈ 4.28 × 19.6(자리 44 의 0.45). 11-19 «2번»: 칩이 없어 옆 여백 0, 상한 72 → 84(메인 1440 의 좁은 칸에서 흰 로고가 작아 보이지 않게) */
 .pt-grid .lg{--lg-h:80px;--lg-px:18px;--lg-s:min(86cqw,137px);border-radius:12px}  /* 137 = 4.28 × 32 */
 @media (max-width:899px){.pt-grid .lg{--lg-h:60px;--lg-px:14px;--lg-s:min(86cqw,102px)}}  /* 102 = 4.28 × 24 */
 /* 연결 구조도: 결제사 칸은 다른 칸과 같은 어두운 칸 위에 흰색 로고(칸 크기·간격은 그대로) */
 .fw-nodes li.lg-node{display:flex;align-items:center;justify-content:center;min-height:46px;padding:0 12px;container-type:inline-size;transition:border-color .2s var(--e-ui);--lg-s:min(86cqw,88px)}  /* 88 ≈ 4.28 × 20.5(칸 최소 높이 46 안). 11-19 «2번»: 77 → 88 */
+
+/* ========== 마우스 효과·지구본 로고(11-19 밤) — BUILD_NOTES 15장. 앞쪽 규칙은 고치지 않고 덧붙이기만 합니다 ==========
+   .gl-lb: 지구본 앞쪽 로고를 그리는 덧캔버스(globe.js 가 만듦). 가장자리 흐림(mask)을 빼서 칸 끝 로고가 흐려지지 않게.
+   .fx-glow: 커서를 따라오는 바탕 빛(v4.js 가 만듦). z-index -1 이라 글·카드 뒤에 깔리고, 첫 화면 영상(.hero 쌓임 맥락) 아래에 있어 영상 위에는 보이지 않습니다.
+   .fx-card: 커서 가까운 카드 테두리 빛(--fx-g 0~1, v4.js). outline 을 테두리 자리(-1px)에 겹쳐 크기·배치가 바뀌지 않고, 키보드 초점 테두리는 그대로 이깁니다. */
+.gl-stage canvas.gl-lb{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;-webkit-mask-image:none;mask-image:none}
+.fx-glow{position:fixed;left:0;top:0;z-index:-1;width:760px;height:760px;margin:-380px 0 0 -380px;border-radius:50%;pointer-events:none;
+  background:radial-gradient(closest-side,rgba(227,181,102,.09),rgba(227,181,102,.05) 22%,rgba(157,185,232,.045) 50%,rgba(157,185,232,0) 100%);
+  opacity:0;transition:opacity .5s var(--e-ui);will-change:transform;contain:strict}
+.fx-glow.on{opacity:1}
+.fx-card:not(:focus-visible){outline:1px solid rgba(227,181,102,calc(var(--fx-g,0) * .6));outline-offset:-1px}
+@media (prefers-reduced-motion:reduce){.fx-glow{display:none}}
