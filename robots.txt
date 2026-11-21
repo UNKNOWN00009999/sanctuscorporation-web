@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://sanctuscorporation.com/sitemap.xml
+Sitemap: https://www.sanctuscorporation.com/sitemap.xml
